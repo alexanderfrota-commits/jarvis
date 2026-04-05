@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>JARVIS</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Share+Tech+Mono&display=swap');
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#030810;color:#a8d4ff;font-family:'Share Tech Mono',monospace;min-height:100vh;display:flex;align-items:center;justify-content:center;overflow:hidden}
+.grid-bg{position:fixed;inset:0;background-image:linear-gradient(rgba(0,120,255,0.04) 1px,transparent 1px),linear-gradient(90deg,rgba(0,120,255,0.04) 1px,transparent 1px);background-size:40px 40px}
+.scanline{position:fixed;inset:0;background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,0.1) 2px,rgba(0,0,0,0.1) 4px);pointer-events:none;z-index:10}
+.corner{position:fixed;width:20px;height:20px}
+.corner-tl{top:16px;left:16px;border-top:1px solid rgba(0,160,255,0.35);border-left:1px solid rgba(0,160,255,0.35)}
+.corner-tr{top:16px;right:16px;border-top:1px solid rgba(0,160,255,0.35);border-right:1px solid rgba(0,160,255,0.35)}
+.corner-bl{bottom:16px;left:16px;border-bottom:1px solid rgba(0,160,255,0.35);border-left:1px solid rgba(0,160,255,0.35)}
+.corner-br{bottom:16px;right:16px;border-bottom:1px solid rgba(0,160,255,0.35);border-right:1px solid rgba(0,160,255,0.35)}
+.container{position:relative;z-index:5;display:flex;flex-direction:column;align-items:center;padding:24px 20px;gap:14px;width:100%;max-width:540px}
+.logo{font-family:'Orbitron',monospace;font-size:34px;font-weight:900;letter-spacing:16px;color:#fff;text-shadow:0 0 20px rgba(0,160,255,0.8),0 0 60px rgba(0,160,255,0.3)}
+.tagline{font-size:9px;letter-spacing:4px;color:#1e3a58;margin-top:-4px}
+.particle-wrap{position:relative;width:240px;height:240px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+#particleCanvas{position:absolute;top:0;left:0}
+.center-label{position:relative;z-index:2;pointer-events:none;text-align:center}
+.center-label .state-text{font-family:'Orbitron',monospace;font-size:7px;letter-spacing:4px;color:rgba(168,212,255,0.25);display:block;transition:color 0.8s}
+.center-label .click-hint{font-size:8px;letter-spacing:2px;color:rgba(168,212,255,0.15);display:block;margin-top:4px}
+.status-bar{display:flex;align-items:center;gap:10px;font-size:11px;letter-spacing:2px;color:#4a8ab5}
+.status-dot{width:7px;height:7px;border-radius:50%}
+.status-dot.off     {background:#ff3344;box-shadow:0 0 8px #ff3344}
+.status-dot.standby {background:#00ff88;box-shadow:0 0 8px #00ff88;animation:bs 2.5s infinite}
+.status-dot.listening{background:#00c8ff;box-shadow:0 0 8px #00c8ff;animation:bf .5s infinite}
+.status-dot.speaking{background:#ffaa00;box-shadow:0 0 8px #ffaa00;animation:bf .3s infinite}
+.status-dot.thinking{background:#9966ff;box-shadow:0 0 8px #9966ff;animation:bf .8s infinite}
+@keyframes bf{0%,100%{opacity:1}50%{opacity:0.15}}
+@keyframes bs{0%,100%{opacity:1}50%{opacity:0.45}}
+.wave-container{display:flex;align-items:center;gap:3px;height:20px}
+.wave-bar{width:3px;background:#00c8ff;border-radius:2px;animation:wave .8s ease-in-out infinite}
+.wave-bar:nth-child(1){animation-delay:0s}.wave-bar:nth-child(2){animation-delay:.1s}.wave-bar:nth-child(3){animation-delay:.2s}.wave-bar:nth-child(4){animation-delay:.3s}.wave-bar:nth-child(5){animation-delay:.4s}
+@keyframes wave{0%,100%{height:4px}50%{height:20px}}
+.interim-bar{width:100%;background:rgba(0,30,60,0.35);border:1px solid rgba(0,80,160,0.18);padding:5px 14px;font-size:11px;color:#3a6a8a;letter-spacing:1px;min-height:26px;border-radius:2px;font-style:italic}
+.transcript-area{width:100%;max-height:195px;overflow-y:auto;display:flex;flex-direction:column;gap:7px}
+.transcript-area::-webkit-scrollbar{width:3px}
+.transcript-area::-webkit-scrollbar-thumb{background:rgba(0,120,255,0.25)}
+.message{padding:9px 13px;border-radius:2px;font-size:12px;line-height:1.6;animation:fi .3s ease}
+@keyframes fi{from{opacity:0;transform:translateY(4px)}to{opacity:1}}
+.message.user  {background:rgba(0,60,120,0.28);border:1px solid rgba(0,100,200,0.18);border-left:3px solid #0080ff;color:#c8e8ff}
+.message.jarvis{background:rgba(0,20,50,0.45);border:1px solid rgba(0,80,160,0.18);border-left:3px solid #00c8ff;color:#a8d4ff}
+.message.system{background:transparent;border:none;border-left:3px solid #1a2a4a;color:#1e3a5a;font-size:10px;letter-spacing:2px;padding:3px 13px}
+.message.memory{background:rgba(0,60,20,0.18);border:1px solid rgba(0,180,80,0.18);border-left:3px solid #00cc44;color:#88ffaa;font-size:11px}
+.message-label{font-size:9px;letter-spacing:3px;margin-bottom:3px;opacity:0.55}
+.user .message-label{color:#0080ff}.jarvis .message-label{color:#00c8ff}
+.thinking-msg{display:flex;gap:6px;align-items:center;padding:9px 13px;color:#6644aa;font-size:11px;letter-spacing:2px}
+.dot-pulse{width:5px;height:5px;background:#9966ff;border-radius:50%;animation:dp 1.2s ease-in-out infinite}
+.dot-pulse:nth-child(2){animation-delay:.2s}.dot-pulse:nth-child(3){animation-delay:.4s}
+@keyframes dp{0%,100%{opacity:.2;transform:scale(.8)}50%{opacity:1;transform:scale(1.3)}}
+.controls{display:flex;gap:10px}
+.btn{padding:7px 18px;background:rgba(0,100,200,0.13);border:1px solid rgba(0,160,255,0.28);color:#7dd4ff;font-family:'Share Tech Mono',monospace;font-size:10px;letter-spacing:2px;cursor:pointer;border-radius:2px;transition:all .2s}
+.btn:hover{background:rgba(0,120,255,0.22);border-color:rgba(0,200,255,0.45)}
+.btn.active{background:rgba(0,160,255,0.13);border-color:#00c8ff;color:#00e8ff}
+.hint{font-size:10px;color:#1a3050;letter-spacing:2px;text-align:center}
+</style>
+</head>
+<body>
+<div class="grid-bg"></div>
+<div class="scanline"></div>
+<div class="corner corner-tl"></div><div class="corner corner-tr"></div>
+<div class="corner corner-bl"></div><div class="corner corner-br"></div>
+
+<div class="container">
+  <div style="text-align:center">
+    <div class="logo">JARVIS</div>
+    <div class="tagline">JUST A RATHER VERY INTELLIGENT SYSTEM</div>
+  </div>
+
+  <div class="particle-wrap" onclick="orbClick()">
+    <canvas id="particleCanvas"></canvas>
+    <div class="center-label">
+      <span class="state-text" id="cst">OFFLINE</span>
+      <span class="click-hint" id="csh">CLIQUE PARA ATIVAR</span>
+    </div>
+  </div>
+
+  <div class="status-bar">
+    <div class="status-dot off" id="sd"></div>
+    <span id="st">OFFLINE</span>
+    <div class="wave-container" id="wc" style="display:none">
+      <div class="wave-bar"></div><div class="wave-bar"></div><div class="wave-bar"></div>
+      <div class="wave-bar"></div><div class="wave-bar"></div>
+    </div>
+  </div>
+
+  <div class="interim-bar" id="ib">...</div>
+  <div class="transcript-area" id="ta"></div>
+
+  <div class="controls">
+    <button class="btn" id="bs" onclick="initJarvis()">▶ ATIVAR</button>
+    <button class="btn" onclick="clearAll()">⌫ LIMPAR</button>
+  </div>
+  <div class="hint" id="hint">Clique ATIVAR uma vez — permita o microfone — pronto</div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════
+// PARTICLES
+// ═══════════════════════════════════════════════
+const _p = (() => {
+  const cv=document.getElementById('particleCanvas'),cx=cv.getContext('2d');
+  const D=window.devicePixelRatio||1,S=240;
+  cv.width=S*D;cv.height=S*D;cv.style.width=S+'px';cv.style.height=S+'px';
+  cx.scale(D,D);
+  const MX=S/2,MY=S/2,TAU=Math.PI*2,N=80,BR=86;
+  const pts=Array.from({length:N},(_,i)=>({a:(i/N)*TAU,ph:Math.random()*TAU,sz:1.1+Math.random()*1.5,acc:i%4===0}));
+  const P={
+    off:     {r:25, g:45, b:80, amp:0, glow:0,   rot:0,     mode:'none'},
+    standby: {r:0,  g:240,b:120,amp:5, glow:.22,  rot:.0035, mode:'breathe'},
+    listening:{r:0, g:195,b:255,amp:30,glow:.9,   rot:0,     mode:'wave'},
+    thinking:{r:165,g:75, b:255,amp:13,glow:.55,  rot:.007,  mode:'orbit'},
+    speaking:{r:255,g:155,b:0,  amp:22,glow:.92,  rot:0,     mode:'pulse'},
+  };
+  let c={r:25,g:45,b:80,amp:0,glow:0,rot:0},t={...P.off},mode='none',tmode='none',rot=0,T=0;
+  const lp=(a,b,k)=>a+(b-a)*k;
+  function ro(p){
+    const a=p.a+rot;
+    if(mode==='breathe')return Math.sin(T*.55+p.ph)*c.amp;
+    if(mode==='wave')return Math.sin(a*4+T*7+p.ph)*c.amp+Math.sin(a*9-T*4.8)*c.amp*.45+Math.sin(T*11*.12+p.ph*2)*c.amp*.3;
+    if(mode==='orbit')return Math.sin(a*2+T*2.5)*c.amp;
+    if(mode==='pulse'){const b=Math.pow(Math.max(0,Math.sin(T*5)),2.2);return b*c.amp+Math.sin(a*3+T*10)*c.amp*.2;}
+    return 0;
+  }
+  function draw(){
+    const K=.055;
+    c.r=lp(c.r,t.r,K);c.g=lp(c.g,t.g,K);c.b=lp(c.b,t.b,K);
+    c.amp=lp(c.amp,t.amp,K);c.glow=lp(c.glow,t.glow,K);c.rot=lp(c.rot,t.rot,K);
+    if(Math.abs(c.amp-t.amp)<.8)mode=tmode;
+    rot+=c.rot;T+=.016;
+    cx.clearRect(0,0,S,S);
+    if(c.glow>.05){const g=cx.createRadialGradient(MX,MY,0,MX,MY,55);g.addColorStop(0,`rgba(${~~c.r},${~~c.g},${~~c.b},${c.glow*.18})`);g.addColorStop(1,'transparent');cx.fillStyle=g;cx.fillRect(0,0,S,S);}
+    const cs=`rgb(${~~c.r},${~~c.g},${~~c.b})`;
+    pts.forEach(p=>{
+      const r=BR+ro(p)+(p.acc?8:0),a=p.a+rot,x=MX+Math.cos(a)*r,y=MY+Math.sin(a)*r;
+      cx.shadowBlur=c.glow>.1?6+c.glow*14:0;cx.shadowColor=cs;
+      const sz=p.sz*(p.acc?1.6:1)*(1+Math.abs(ro(p))/(t.amp+1)*.45);
+      cx.beginPath();cx.arc(x,y,Math.max(.5,sz),0,TAU);cx.fillStyle=cs;cx.globalAlpha=.28+c.glow*.72;cx.fill();
+    });
+    cx.shadowBlur=0;cx.globalAlpha=1;
+    requestAnimationFrame(draw);
+  }
+  draw();
+  return{set(s){const q=P[s]||P.off;t={...q};tmode=q.mode;}};
+})();
+
+// ═══════════════════════════════════════════════
+// CONFIG
+// ═══════════════════════════════════════════════
+const API_URL='http://76.13.224.226:3000/ask';
+
+const VOCAB=[
+  ['web hulk','webhook'],['web hawk','webhook'],['web hook','webhook'],['webhoks','webhooks'],
+  ['\\bband\\b','beendi'],['\\bbandi\\b','beendi'],['\\bbendy\\b','beendi'],['\\bbende\\b','beendi'],['\\bbendi\\b','beendi'],['\\bvendi\\b','beendi'],['been di','beendi'],
+  ['silver pay','silverpay'],['silver pei','silverpay'],
+  ['bloopy','bloopi'],['\\bblopi\\b','bloopi'],
+  ['pagar me','pagar.me'],['rapid charge back','rapidchargeback'],
+  ['\\bparceiro\\b','parcero'],['mund pay','mundpay'],
+  ['supa base','supabase'],['charge back','chargeback'],['check out','checkout'],
+  ['back end','backend'],['front end','frontend'],['ene 8 ene','n8n'],['\\biné\\b','n8n'],
+];
+const fv=t=>{let r=t;VOCAB.forEach(([w,c])=>{r=r.replace(new RegExp(w,'gi'),c);});return r;};
+
+const WAKE  =['jarvis','oi jarvis','ei jarvis','hey jarvis','ok jarvis'];
+const MEM   =['memoriza','lembra disso','salva isso','guarda isso','anota isso'];
+const STOP  =['para','silêncio','cala boca','cancela','cancelar','chega'];
+const norm  =t=>t.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim();
+const has   =(a,t)=>a.some(w=>norm(t).includes(norm(w)));
+const afw   =t=>{let r=t;WAKE.forEach(w=>{const i=norm(r).indexOf(norm(w));if(i!==-1)r=r.substring(i+w.length).trim();});return r.replace(/^[,.:!? ]+/,'').trim();};
+
+// ═══════════════════════════════════════════════
+// ESTADO GLOBAL
+// ═══════════════════════════════════════════════
+let state='off';
+let rec=null;
+let cap='',silT=null,wakT=null;
+let audio=null;
+let history=[];
+
+// ═══════════════════════════════════════════════
+// RECOGNIZER — criado UMA VEZ, NUNCA destruído
+// Regra de ouro: NUNCA chamar rec.stop() exceto
+// ao desligar. onend só reinicia, nunca recria.
+// ═══════════════════════════════════════════════
+async function initJarvis(){
+  if(state!=='off')return;
+  const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+  if(!SR){addM('system','[ USE O CHROME ]');return;}
+
+  // Cria UMA VEZ
+  rec=new SR();
+  rec.lang='pt-BR';
+  rec.continuous=true;
+  rec.interimResults=true;
+  rec.maxAlternatives=1;
+
+  rec.onresult=onResult;
+
+  // ── Restart inteligente do recognizer ──
+  // Chrome mata a sessão por: no-speech timeout (~5-60s), rede, etc.
+  // Isso é NORMAL. Precisamos reiniciar rápido para não perder áudio.
+  // Só protegemos contra loop de erro real (permissão, crash).
+  let _lastError='';
+  let _rapidFails=0;
+
+  rec.onerror=e=>{
+    _lastError=e.error||'';
+    if(e.error==='not-allowed'||e.error==='service-not-allowed'){
+      addM('system','[ MICROFONE NEGADO — recarregue e permita ]');
+      state='off';setUI('off');return;
+    }
+    // aborted = tentou start() duplicado → ignora
+    if(e.error==='aborted')return;
+    // no-speech = silêncio → normal, onend reinicia
+    // network, audio-capture → onend reinicia
+  };
+
+  rec.onend=()=>{
+    if(state==='off')return;
+
+    // Se o último erro foi de permissão, não reinicia
+    if(_lastError==='not-allowed'||_lastError==='service-not-allowed')return;
+
+    // Proteção contra crash-loop real (não conta no-speech)
+    if(_lastError&&_lastError!=='no-speech'){
+      _rapidFails++;
+      if(_rapidFails>6){
+        _rapidFails=0;
+        addM('system','[ MIC REINICIANDO... ]');
+        setTimeout(()=>{if(state!=='off'){try{rec.start();}catch(e){}}},3000);
+        return;
+      }
+    } else {
+      _rapidFails=0;
+    }
+    _lastError='';
+
+    // Restart rápido (50ms) — em HTTPS não repede permissão
+    setTimeout(()=>{
+      if(state!=='off'){try{rec.start();}catch(e){}}
+    },50);
+  };
+
+  // Pede permissão via getUserMedia (cacheia no HTTPS)
+  try{
+    const stream=await navigator.mediaDevices.getUserMedia({audio:true});
+    stream.getTracks().forEach(t=>t.stop());
+  }catch(e){
+    addM('system','[ MICROFONE BLOQUEADO — permita nas configurações do navegador ]');
+    state='off';setUI('off');return;
+  }
+  try{rec.start();}catch(e){addM('system','[ ERRO AO INICIAR MIC ]');return;}
+
+  state='standby';
+  document.getElementById('bs').textContent='⏸ ATIVO';
+  document.getElementById('bs').classList.add('active');
+  document.getElementById('csh').style.display='none';
+  document.getElementById('hint').textContent='Diga "Jarvis [pergunta]" · "para" interrompe · "memoriza" salva';
+  setUI('standby');
+  addM('system','[ SISTEMA ATIVO — DIGA "JARVIS" ]');
+}
+
+// ═══════════════════════════════════════════════
+// HANDLER ÚNICO — decide o que fazer pelo state
+// ═══════════════════════════════════════════════
+function onResult(e){
+  const res=e.results[e.results.length-1];
+  const raw=res[0].transcript.trim();
+  const fin=res.isFinal;
+  const txt=fv(raw);
+
+  // STANDBY → só wake word
+  if(state==='standby'){
+    document.getElementById('ib').textContent=raw;
+    if(has(WAKE,raw))wakeUp(afw(raw));
+    return;
+  }
+
+  // LISTENING → captura pergunta
+  if(state==='listening'){
+    document.getElementById('ib').textContent=txt;
+    if(has(STOP,txt)){addM('system','[ CANCELADO ]');goStandby();return;}
+    cap=txt;
+    clearTimeout(silT);
+    if(fin){sendQ(cap);}
+    else{silT=setTimeout(()=>{if(state==='listening'&&cap)sendQ(cap);},2200);}
+    return;
+  }
+
+  // SPEAKING / THINKING → só "para"
+  if((state==='speaking'||state==='thinking')&&fin){
+    if(has(STOP,txt)){stopAudio();addM('system','[ PARADO ]');goStandby();}
+  }
+}
+
+// ═══════════════════════════════════════════════
+// FLUXO
+// ═══════════════════════════════════════════════
+function wakeUp(afterWake){
+  if(state!=='standby')return;
+  state='listening';cap='';
+  clearTimeout(silT);clearTimeout(wakT);
+  stopAudio();
+  setUI('listening');showW(true);
+  addM('system','[ JARVIS ATIVADO ]');
+  document.getElementById('ib').textContent='fale agora...';
+  if(afterWake&&afterWake.length>2){
+    cap=fv(afterWake);
+    silT=setTimeout(()=>{if(state==='listening'&&cap)sendQ(cap);},900);
+  } else {
+    wakT=setTimeout(()=>{if(state==='listening'&&!cap){addM('system','[ SEM ENTRADA ]');goStandby();}},8000);
+  }
+}
+
+async function sendQ(text){
+  if(state==='thinking'||!text.trim())return;
+  state='thinking';
+  clearTimeout(silT);clearTimeout(wakT);
+  cap='';
+  document.getElementById('ib').textContent='';
+  setUI('thinking');showW(false);
+  const c2=fv(text),isMem=has(MEM,c2),pre=isMem?'[MEMORIZAR] ':'';
+  addM('user',c2);showThink();
+  history.push({role:'user',content:c2});
+  try{
+    const r=await fetch(API_URL,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({question:pre+c2,history:history.slice(-8)})});
+    const d=await r.json();
+    const reply=d.reply||d.message||'';
+    const b64=d.audio||null;
+    hideThink();
+    history.push({role:'assistant',content:reply});
+    addM(isMem?'memory':'jarvis',isMem?'💾 '+reply:reply);
+    speak(reply,b64);
+  }catch(e){
+    hideThink();
+    addM('system','[ ERRO DE CONEXÃO — VPS offline? ]');
+    history.pop();
+    goStandby();
+  }
+}
+
+function speak(text,b64){
+  state='speaking';setUI('speaking');
+  if(b64){
+    audio=new Audio('data:audio/mpeg;base64,'+b64);
+    audio.onended=()=>{audio=null;goStandby();};
+    audio.onerror=()=>{audio=null;speakTTS(text);};
+    audio.play().catch(()=>speakTTS(text));
+  }else{speakTTS(text);}
+}
+function speakTTS(text){
+  speechSynthesis.cancel();
+  const u=new SpeechSynthesisUtterance(text);
+  u.lang='pt-BR';u.rate=1.05;u.pitch=0.85;
+  u.onend=()=>goStandby();
+  speechSynthesis.speak(u);
+}
+function stopAudio(){if(audio){audio.pause();audio=null;}speechSynthesis.cancel();}
+
+function goStandby(){
+  // ← NÃO para o recognizer. Só muda state.
+  stopAudio();
+  clearTimeout(silT);clearTimeout(wakT);
+  cap='';state='standby';
+  setUI('standby');showW(false);
+  document.getElementById('ib').textContent='...';
+}
+
+function orbClick(){
+  if(state==='off'){initJarvis();return;}
+  if(state==='standby'){wakeUp('');return;}
+  if(state==='listening'){if(cap)sendQ(cap);else goStandby();return;}
+  if(state==='speaking'||state==='thinking'){stopAudio();addM('system','[ INTERROMPIDO ]');goStandby();}
+}
+
+// ═══════════════════════════════════════════════
+// UI
+// ═══════════════════════════════════════════════
+const SL={off:'OFFLINE',standby:'AGUARDANDO',listening:'OUVINDO',thinking:'PROCESSANDO',speaking:'FALANDO'};
+function setUI(s){
+  document.getElementById('st').textContent=SL[s]||s.toUpperCase();
+  document.getElementById('sd').className='status-dot '+s;
+  document.getElementById('cst').textContent=SL[s]||s.toUpperCase();
+  _p.set(s);
+}
+function showW(v){document.getElementById('wc').style.display=v?'flex':'none';}
+
+function addM(role,text){
+  const a=document.getElementById('ta');
+  const d=document.createElement('div');
+  d.className='message '+role;
+  if(role==='user')d.innerHTML=`<div class="message-label">// VOCÊ</div>${text}`;
+  else if(role==='jarvis')d.innerHTML=`<div class="message-label">// JARVIS</div>${text}`;
+  else if(role==='memory')d.innerHTML=`<div class="message-label">// MEMORIZADO</div>${text}`;
+  else d.textContent=text;
+  a.appendChild(d);a.scrollTop=a.scrollHeight;
+}
+function showThink(){
+  const a=document.getElementById('ta');
+  const d=document.createElement('div');
+  d.className='thinking-msg';d.id='tm';
+  d.innerHTML='<div class="dot-pulse"></div><div class="dot-pulse"></div><div class="dot-pulse"></div><span style="margin-left:8px;letter-spacing:3px">PROCESSANDO</span>';
+  a.appendChild(d);a.scrollTop=a.scrollHeight;
+}
+function hideThink(){const t=document.getElementById('tm');if(t)t.remove();}
+function clearAll(){document.getElementById('ta').innerHTML='';history=[];addM('system','[ HISTÓRICO LIMPO ]');}
+</script>
+</body>
+</html>

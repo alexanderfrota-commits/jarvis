@@ -181,6 +181,18 @@ let cap='',silT=null,wakT=null;
 let audio=null;
 let history=[];
 
+// ── Audio persistente para mobile ──
+// Mobile bloqueia new Audio() criado programaticamente.
+// Criamos UM elemento e desbloqueamos no primeiro toque.
+const _audioEl=new Audio();
+_audioEl.playsInline=true;
+let _audioUnlocked=false;
+function unlockAudio(){
+  if(_audioUnlocked)return;
+  _audioEl.src='data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=';
+  _audioEl.play().then(()=>{_audioUnlocked=true;}).catch(()=>{});
+}
+
 // ═══════════════════════════════════════════════
 // RECOGNIZER — criado UMA VEZ, NUNCA destruído
 // Regra de ouro: NUNCA chamar rec.stop() exceto
@@ -188,6 +200,7 @@ let history=[];
 // ═══════════════════════════════════════════════
 async function initJarvis(){
   if(state!=='off')return;
+  unlockAudio(); // Desbloqueia áudio no toque do usuário (mobile)
   const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
   if(!SR){addM('system','[ USE O CHROME ]');return;}
 
@@ -339,22 +352,36 @@ async function sendQ(text){
 }
 
 function speak(text,b64){
+  // Para qualquer áudio anterior antes de começar novo
+  stopAudio();
   state='speaking';setUI('speaking');
   if(b64){
-    audio=new Audio('data:audio/mpeg;base64,'+b64);
-    audio.onended=()=>{audio=null;goStandby();};
-    audio.onerror=()=>{audio=null;speakTTS(text);};
-    audio.play().catch(()=>speakTTS(text));
+    _audioEl.onended=null;
+    _audioEl.onerror=null;
+    _audioEl.src='data:audio/mpeg;base64,'+b64;
+    _audioEl.onended=()=>{_audioEl.onended=null;audio=null;goStandby();};
+    _audioEl.onerror=()=>{_audioEl.onerror=null;audio=null;speakTTS(text);};
+    audio=_audioEl;
+    const p=_audioEl.play();
+    if(p&&p.catch) p.catch(()=>{
+      // play() falhou (mobile bloqueou) → fallback TTS
+      if(state==='speaking'){audio=null;speakTTS(text);}
+    });
   }else{speakTTS(text);}
 }
 function speakTTS(text){
   speechSynthesis.cancel();
   const u=new SpeechSynthesisUtterance(text);
   u.lang='pt-BR';u.rate=1.05;u.pitch=0.85;
-  u.onend=()=>goStandby();
+  u.onend=()=>{if(state==='speaking')goStandby();};
   speechSynthesis.speak(u);
 }
-function stopAudio(){if(audio){audio.pause();audio=null;}speechSynthesis.cancel();}
+function stopAudio(){
+  _audioEl.onended=null;
+  _audioEl.onerror=null;
+  if(audio){_audioEl.pause();_audioEl.src='';audio=null;}
+  speechSynthesis.cancel();
+}
 
 function goStandby(){
   // ← NÃO para o recognizer. Só muda state.
@@ -366,6 +393,7 @@ function goStandby(){
 }
 
 function orbClick(){
+  unlockAudio(); // Desbloqueia áudio em qualquer toque no orb
   if(state==='off'){initJarvis();return;}
   if(state==='standby'){wakeUp('');return;}
   if(state==='listening'){if(cap)sendQ(cap);else goStandby();return;}

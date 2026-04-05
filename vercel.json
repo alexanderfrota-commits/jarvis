@@ -1,0 +1,8 @@
+{
+  "rewrites": [
+    {
+      "source": "/api/ask",
+      "destination": "http://76.13.224.226:3000/ask"
+    }
+  ]
+}

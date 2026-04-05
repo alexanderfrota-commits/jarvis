@@ -151,7 +151,7 @@ const _p = (() => {
 // ═══════════════════════════════════════════════
 // CONFIG
 // ═══════════════════════════════════════════════
-const API_URL='http://76.13.224.226:3000/ask';
+const API_URL='/api/ask';
 
 const VOCAB=[
   ['web hulk','webhook'],['web hawk','webhook'],['web hook','webhook'],['webhoks','webhooks'],
@@ -200,49 +200,44 @@ async function initJarvis(){
 
   rec.onresult=onResult;
 
-  // ── Restart inteligente do recognizer ──
-  // Chrome mata a sessão por: no-speech timeout (~5-60s), rede, etc.
-  // Isso é NORMAL. Precisamos reiniciar rápido para não perder áudio.
-  // Só protegemos contra loop de erro real (permissão, crash).
-  let _lastError='';
-  let _rapidFails=0;
+  // ── Restart do recognizer ──
+  // Chrome SEMPRE mata a sessão após silêncio (no-speech) ou timeout.
+  // Isso é comportamento normal. Reiniciamos silenciosamente.
+  // Única exceção: permissão negada → para tudo.
+
+  let _deadCount=0;
 
   rec.onerror=e=>{
-    _lastError=e.error||'';
     if(e.error==='not-allowed'||e.error==='service-not-allowed'){
       addM('system','[ MICROFONE NEGADO — recarregue e permita ]');
       state='off';setUI('off');return;
     }
-    // aborted = tentou start() duplicado → ignora
-    if(e.error==='aborted')return;
-    // no-speech = silêncio → normal, onend reinicia
-    // network, audio-capture → onend reinicia
+    // Todos os outros erros (no-speech, network, audio-capture, aborted)
+    // são normais no Chrome. Não faz nada — onend cuida do restart.
   };
 
   rec.onend=()=>{
     if(state==='off')return;
-
-    // Se o último erro foi de permissão, não reinicia
-    if(_lastError==='not-allowed'||_lastError==='service-not-allowed')return;
-
-    // Proteção contra crash-loop real (não conta no-speech)
-    if(_lastError&&_lastError!=='no-speech'){
-      _rapidFails++;
-      if(_rapidFails>6){
-        _rapidFails=0;
-        addM('system','[ MIC REINICIANDO... ]');
-        setTimeout(()=>{if(state!=='off'){try{rec.start();}catch(e){}}},3000);
-        return;
-      }
-    } else {
-      _rapidFails=0;
-    }
-    _lastError='';
-
-    // Restart rápido (50ms) — em HTTPS não repede permissão
+    // Restart silencioso com 100ms de delay
     setTimeout(()=>{
-      if(state!=='off'){try{rec.start();}catch(e){}}
-    },50);
+      if(state==='off')return;
+      try{
+        rec.start();
+        _deadCount=0;
+      }catch(e){
+        _deadCount++;
+        // Se falhar 20x seguidas, algo está muito errado
+        if(_deadCount>20){
+          addM('system','[ MIC PERDIDO — clique ATIVAR novamente ]');
+          state='off';setUI('off');
+          document.getElementById('bs').textContent='▶ ATIVAR';
+          document.getElementById('bs').classList.remove('active');
+        } else {
+          // Tenta de novo em 1s
+          setTimeout(()=>{if(state!=='off'){try{rec.start();_deadCount=0;}catch(e){}}},1000);
+        }
+      }
+    },100);
   };
 
   // Pede permissão via getUserMedia (cacheia no HTTPS)
